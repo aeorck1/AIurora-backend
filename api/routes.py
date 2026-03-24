@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
 # Import our database, schemas, and security
@@ -8,7 +8,7 @@ from core.security import validate_uuid
 from core.config import settings
 
 # Import our AI Brain
-from services.ai_service import generate_wellness_response
+from services.ai_services import generate_wellness_response
 
 # Create the router (this acts like a mini-FastAPI app)
 router = APIRouter()
@@ -48,7 +48,8 @@ def send_message(request: ChatRequest, db: Session = Depends(get_db)):
     db.commit()
 
     # 4. Local Crisis Filter (Using the MANI hotline from our config file!)
-    crisis_keywords = ["suicide", "kill myself", "end it all", "harm myself"]
+    # crisis_keywords = ["suicide", "kill myself", "end it all", "harm myself"]
+    
     if any(word in request.message.lower() for word in crisis_keywords):
         crisis_reply = f"This sounds incredibly difficult. Please know you are not alone. In Nigeria, you can reach the Mentally Aware Nigeria Initiative (MANI) at {settings.CRISIS_HOTLINE_NG}. Please reach out to them."
         
@@ -56,6 +57,9 @@ def send_message(request: ChatRequest, db: Session = Depends(get_db)):
         db.add(ai_msg)
         db.commit()
         return ChatResponse(reply=crisis_reply, is_crisis=True)
+# seem the AI handles it, itself rather than using a hardcoded crisis keyword
+
+
 
     # 5. Fetch the user's chat history (last 20 messages for context)
     chat_history = db.query(Message).filter(
@@ -69,6 +73,46 @@ def send_message(request: ChatRequest, db: Session = Depends(get_db)):
     ai_reply = generate_wellness_response(request.message, chat_history)
     
     # 7. Save AI's response to DB
+    ai_msg = Message(user_id=safe_user_id, role="model", content=ai_reply)
+    db.add(ai_msg)
+    db.commit()
+
+    return ChatResponse(reply=ai_reply, is_crisis=False)
+
+
+@router.post("/chat/audio", response_model=ChatResponse)
+async def send_audio_message(
+    user_id: str = Form(...),          # Form data instead of JSON
+    audio_file: UploadFile = File(...), # The actual media file
+    db: Session = Depends(get_db)
+):
+    """Handles direct audio file uploads."""
+    safe_user_id = validate_uuid(user_id)
+    
+    user = db.query(User).filter(User.id == safe_user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # 1. Read the audio file into memory
+    audio_bytes = await audio_file.read()
+
+    # 2. Save a placeholder in the database so the user sees they sent a voice note
+    user_msg = Message(user_id=safe_user_id, role="user", content="🎙️ [Voice Message Sent]")
+    db.add(user_msg)
+    db.commit()
+
+    # 3. Fetch history
+    chat_history = db.query(Message).filter(
+        Message.user_id == safe_user_id, 
+        Message.id != user_msg.id
+    ).order_by(Message.created_at.desc()).limit(20).all()
+    chat_history.reverse()
+
+    # 4. Send the audio to Gemini!
+    # Note: Depending on the phone, the mime_type will usually be 'audio/m4a' or 'audio/mp4'
+    ai_reply = generate_audio_wellness_response(audio_bytes, audio_file.content_type, chat_history)
+    
+    # 5. Save AI's response
     ai_msg = Message(user_id=safe_user_id, role="model", content=ai_reply)
     db.add(ai_msg)
     db.commit()
