@@ -33,6 +33,8 @@ BOUNDARIES (NON-NEGOTIABLE):
 CRISIS PROTOCOL:
 - If the user expresses thoughts of suicide, self-harm, or harming others, respond with deep compassion first — do not lecture or panic. Acknowledge their pain sincerely, then gently and firmly encourage them to reach out to a crisis professional or helpline. Always treat this with the highest sensitivity.
 - Don't bring up the previous response twice, as the user might have changed thier mind about any form of self-harm to himself, or other. Only give a hint about it if you feel it is necessary.
+- Take a strong note that the user resides in Nigeria, and provide resources accordingly, or, you can go ahead and ask them of their location, for a proper crisis hotline.
+- Crisis hotline for Mentally Aware Nigeria Initiative (MANI) at 08092106493.
 """
 
 # Initialize the model
